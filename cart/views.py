@@ -1,7 +1,8 @@
+from django.contrib import messages
 from django.views import generic
 from django.shortcuts import get_object_or_404, reverse, redirect
 from .forms import AddToCartForm, AddressForm
-from .models import Product, OrderItem, PriceVariables
+from .models import Product, OrderItem, PriceVariables, Address
 from .utils import get_or_set_order_session
 
 
@@ -107,3 +108,54 @@ class CheckoutView(generic.FormView):
 
     def get_success_url(self):
         return reverse("home")
+
+    def form_valid(self, form):
+        order = get_or_set_order_session(self.request)
+        selected_shipping_address = form.cleaned_data.get('selected_shipping_address')
+        selected_billing_address = form.cleaned_data.get('selected_billing_address')
+
+        if selected_shipping_address:
+            order.shipping_address = selected_shipping_address
+        else:
+            address = Address.objects.create(
+                address_type='S',
+                user=self.request.user,
+                address_line1=form.cleaned_data['shipping_address_line1'],
+                address_line2=form.cleaned_data['shipping_address_line2'],
+                zip_code=form.cleaned_data['shipping_zip_code'],
+                city=form.cleaned_data['shipping_city'],
+            )
+            order.shipping_address = address
+
+        if selected_billing_address:
+            order.billing_address = selected_billing_address
+        else:
+            address = Address.objects.create(
+                address_type='B',
+                user=self.request.user,
+                address_line1=form.cleaned_data['billing_address_line1'],
+                address_line2=form.cleaned_data['billing_address_line2'],
+                zip_code=form.cleaned_data['billing_zip_code'],
+                city=form.cleaned_data['billing_city'],
+            )
+            order.billing_address = address
+        order.save()
+        messages.info(
+            self.request, "You have successfully added your addresses")
+        return super(CheckoutView, self).form_valid(form)
+
+    def get_form_kwargs(self):
+        kwargs = super(CheckoutView, self).get_form_kwargs()
+        kwargs["user_id"] = self.request.user.id
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super(CheckoutView, self).get_context_data(**kwargs)
+        context['order'] = get_or_set_order_session(self.request)
+        price_vars = PriceVariables.objects.first()
+        raw_discount = (price_vars.discount * context['order'].get_raw_subtotal())
+        context['tax'] = (price_vars.tax*(context['order'].get_raw_subtotal()-raw_discount))/100
+        context['delivery'] = price_vars.delivery / 100
+        context['discount'] = raw_discount / 100
+
+        return context
