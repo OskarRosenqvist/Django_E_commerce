@@ -2,8 +2,21 @@ from django.contrib import messages
 from django.core.mail import send_mail
 from django.shortcuts import render, reverse
 from django.views import generic
-from .forms import ContactForm
 from django.conf import settings
+from django.contrib.auth.mixins import LoginRequiredMixin
+from cart.models import Order
+from .forms import ContactForm
+
+
+class ProfileView(LoginRequiredMixin, generic.TemplateView):
+    template_name = 'profile.html'
+
+    def get_context_data(self, **kwargs):
+        context = super(ProfileView, self).get_context_data(**kwargs)
+        context.update({
+            "orders": Order.objects.filter(user=self.request.user, ordered=True)
+        })
+        return context
 
 
 class HomeView(generic.TemplateView):

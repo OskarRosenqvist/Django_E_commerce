@@ -7,6 +7,10 @@ from .views import (
     DecreaseQuantityView,
     DeleteItemView,
     CheckoutView,
+    PaymentView,
+    ThankYouView,
+    ConfirmOrderView,
+    OrderDetailView,
 )
 
 app_name = 'cart'
@@ -18,4 +22,8 @@ urlpatterns = (
     path('decrease-quantity/<pk>/', DecreaseQuantityView.as_view(), name='decrease_quantity'),
     path('delete-item/<pk>/', DeleteItemView.as_view(), name='delete_item'),
     path('checkout/', CheckoutView.as_view(), name='checkout'),
+    path('payment/', PaymentView.as_view(), name='payment'),
+    path('thanks/', ThankYouView.as_view(), name='thank-you'),
+    path('confirm-order/', ConfirmOrderView.as_view(), name='confirm-order'),
+    path('orders/<pk>/', OrderDetailView.as_view(), name='order-detail'),
 )

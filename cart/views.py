@@ -1,8 +1,13 @@
+import datetime
+import json
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
 from django.views import generic
 from django.shortcuts import get_object_or_404, reverse, redirect
 from .forms import AddToCartForm, AddressForm
-from .models import Product, OrderItem, PriceVariables, Address
+from .models import Product, OrderItem, PriceVariables, Address, Payment, Order
 from .utils import get_or_set_order_session
 
 
@@ -107,7 +112,7 @@ class CheckoutView(generic.FormView):
     form_class = AddressForm
 
     def get_success_url(self):
-        return reverse("home")
+        return reverse("cart:payment")
 
     def form_valid(self, form):
         order = get_or_set_order_session(self.request)
@@ -155,6 +160,55 @@ class CheckoutView(generic.FormView):
         price_vars = PriceVariables.objects.first()
         raw_discount = (price_vars.discount * context['order'].get_raw_subtotal())
         context['tax'] = (price_vars.tax*(context['order'].get_raw_subtotal()-raw_discount))/100
+        context['delivery'] = price_vars.delivery / 100
+        context['discount'] = raw_discount / 100
+
+        return context
+
+
+class PaymentView(generic.TemplateView):
+    template_name = "cart/payment.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(PaymentView, self).get_context_data(**kwargs)
+        context["PAYPAL_CLIENT_ID"] = settings.PAYPAL_CLIENT_ID
+        context['order'] = get_or_set_order_session(self.request)
+        context['CALLBACK_URL'] = self.request.build_absolute_uri(reverse("cart:thank-you"))
+        return context
+
+class ConfirmOrderView(generic.View):
+    def post(self, request, *args, **kwargs):
+        order = get_or_set_order_session(request)
+        body = json.loads(request.body)
+        # print(body)
+        payment = Payment.objects.create(
+            order=order,
+            successful=True,
+            raw_response=json.dumps(body),
+            amount=float(body["purchase_units"][0]["amount"]["value"]),
+            payment_method='PayPal'
+        )
+        order.ordered = True
+        order.ordered_date = datetime.date.today()
+        order.save()
+        return JsonResponse({"data": "Success"})
+
+
+class ThankYouView(generic.TemplateView):
+    template_name = "cart/thanks.html"
+
+
+class OrderDetailView(LoginRequiredMixin, generic.DetailView):
+    template_name = "order.html"
+    queryset = Order.objects.all()
+    context_object_name = 'order'
+
+
+    def get_context_data(self, **kwargs):
+        context = super(OrderDetailView, self).get_context_data(**kwargs)
+        price_vars = PriceVariables.objects.first()
+        raw_discount = (price_vars.discount * context['order'].get_raw_subtotal())
+        context['tax'] = (price_vars.tax * (context['order'].get_raw_subtotal() - raw_discount)) / 100
         context['delivery'] = price_vars.delivery / 100
         context['discount'] = raw_discount / 100
 
